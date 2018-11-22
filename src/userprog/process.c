@@ -21,8 +21,9 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void get_file_name(char *cmd_with_args, char *file_name);
-static void get_command_args(char *cmd_with_args, char* argv[], int *argc);
+static void extract_file_name(char *name, char *file_name);
+static void get_arg_from_commandline(char *name, char* argv[], int *argc);
+static void push_arguments_on_stack(void **esp, char *file_name);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -31,7 +32,7 @@ static void get_command_args(char *cmd_with_args, char* argv[], int *argc);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy, *actual_file_name;
+  char *fn_copy, *file_name_only;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -41,10 +42,10 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  actual_file_name = malloc (strlen(fn_copy)+1);
-  get_file_name(fn_copy, actual_file_name);
+  file_name_only = malloc (strlen(fn_copy)+1);
+  extract_file_name(fn_copy, file_name_only);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (actual_file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name_only, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -239,11 +240,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   char *fn_copy = malloc (strlen(file_name)+1);
   strlcpy(fn_copy, file_name, strlen(file_name)+1);
 
-  char *actual_file_name = malloc (strlen(fn_copy)+1);
-  get_file_name(fn_copy, actual_file_name);
+  char *file_name_only = malloc (strlen(fn_copy)+1);
+  extract_file_name(fn_copy, file_name_only);
 
   /* Open executable file. */
-  file = filesys_open (actual_file_name);
+  file = filesys_open (file_name_only);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -465,6 +466,55 @@ setup_stack (void **esp, char *file_name)
         palloc_free_page (kpage);
     }
 
+  push_arguments_on_stack(esp,file_name);
+
+  return success;
+}
+
+/* Adds a mapping from user virtual address UPAGE to kernel
+   virtual address KPAGE to the page table.
+   If WRITABLE is true, the user process may modify the page;
+   otherwise, it is read-only.
+   UPAGE must not already be mapped.
+   KPAGE should probably be a page obtained from the user pool
+   with palloc_get_page().
+   Returns true on success, false if UPAGE is already mapped or
+   if memory allocation fails. */
+static bool
+install_page (void *upage, void *kpage, bool writable)
+{
+  struct thread *t = thread_current ();
+
+  /* Verify that there's not already a page at that virtual
+     address, then map our page there. */
+  return (pagedir_get_page (t->pagedir, upage) == NULL
+          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static void
+extract_file_name(char *name, char *file_name)
+{
+  char *saveptr;
+  strlcpy (file_name, name, PGSIZE);
+  file_name = strtok_r(file_name, " ", &saveptr);
+}
+
+static void
+get_arg_from_commandline(char *name, char* argv[], int *argc)
+{
+  char *saveptr;
+  argv[0] = strtok_r(name, " ", &saveptr);
+  char *token;
+  *argc = 1;
+  while((token = strtok_r(NULL, " ", &saveptr))!=NULL)
+  {
+    argv[(*argc)++] = token;
+  }
+}
+
+static void 
+push_arguments_on_stack(void **esp, char *file_name)
+{
   char *token, *save_ptr;
   int argc = 0,i;
 
@@ -515,47 +565,4 @@ setup_stack (void **esp, char *file_name)
 
   free(copy);
   free(argv);
-
-  return success;
-}
-
-/* Adds a mapping from user virtual address UPAGE to kernel
-   virtual address KPAGE to the page table.
-   If WRITABLE is true, the user process may modify the page;
-   otherwise, it is read-only.
-   UPAGE must not already be mapped.
-   KPAGE should probably be a page obtained from the user pool
-   with palloc_get_page().
-   Returns true on success, false if UPAGE is already mapped or
-   if memory allocation fails. */
-static bool
-install_page (void *upage, void *kpage, bool writable)
-{
-  struct thread *t = thread_current ();
-
-  /* Verify that there's not already a page at that virtual
-     address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
-}
-
-static void
-get_file_name(char *cmd_with_args, char *file_name)
-{
-  char *placeholder;
-  strlcpy (file_name, cmd_with_args, PGSIZE);
-  file_name = strtok_r(file_name, " ", &placeholder);
-}
-
-static void
-get_command_args(char *cmd_with_args, char* argv[], int *argc)
-{
-  char *placeholder;
-  argv[0] = strtok_r(cmd_with_args, " ", &placeholder);
-  char *token;
-  *argc = 1;
-  while((token = strtok_r(NULL, " ", &placeholder))!=NULL)
-  {
-    argv[(*argc)++] = token;
-  }
 }
