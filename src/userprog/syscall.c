@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
-#include "threads/thread.h"
 #include "process.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static void syscall_handler (struct intr_frame *);
 // static int memoryread_user (void *src, void *des, size_t bytes);
@@ -24,7 +24,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 
   int system_call = * p;
-  int s;
 	switch (system_call)
 	{
 		// case SYS_HALT:
@@ -36,9 +35,18 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
 		case SYS_WRITE:
-		if(*(p+5)==1)
+		if(*(p+1)==1)
 		{
-			putbuf(*(p+6),*(p+7));
+			putbuf(*(p+2),*(p+3));
+			f->eax = *(p+3);
+		}
+		else
+		{
+			struct process_file* f_ptr = file_search(&thread_current()->file_list, *(p+1));
+			if(f_ptr==NULL)
+				f->eax=-1;
+			else
+				f->eax = file_write_at (f_ptr->file_ptr, *(p+2), *(p+3),0);
 		}
 		break;
 
@@ -55,13 +63,31 @@ syscall_handler (struct intr_frame *f UNUSED)
 		// thread_current()->exit_code = -1;
 		// thread_exit();
 		//acquire_filesys_lock();
-		
-		s=f->eax = filesys_create(*(p+4),*(p+5));
+		//hex_dump(*(p+1),*(p+1),16,true);
+		//printf("%s",(char *)*(p+1));
+		f->eax = filesys_create(*(p+1),*(p+2));
 		// printf("%d",s);
 		//release_filesys_lock();
 	
 		
 		break;
+		}
+
+		case SYS_OPEN:
+		{
+			struct file* fptr = filesys_open (*(p+1));
+			if(fptr==NULL)
+				f->eax = -1;
+			else
+			{
+				struct process_file *pfile = malloc(sizeof(*pfile));
+				pfile->file_ptr = fptr;
+				pfile->fd_num = thread_current()->fd_num;
+				thread_current()->fd_num++;
+				list_push_back (&thread_current()->file_list, &pfile->elem);
+				f->eax = pfile->fd_num;
+			}
+			break;
 		}
 
 		default:
@@ -92,3 +118,17 @@ syscall_handler (struct intr_frame *f UNUSED)
 // : "=&a" (result) : "m" (*uaddr));
 // return result;
 // }
+
+
+struct process_file* file_search(struct list* files, int fd_num)
+{
+	struct list_elem *e;
+       for (e = list_begin (files); e != list_end (files);
+           e = list_next (e))
+        {
+          struct process_file *f = list_entry (e, struct process_file, elem);
+          if(f->fd_num == fd_num)
+          	return f;
+        }
+   return NULL;
+}
