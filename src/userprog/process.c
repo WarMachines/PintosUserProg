@@ -94,13 +94,31 @@ start_process (void *file_name_)
    does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) 
-{
-  int dummy = 0, i;
-  for(i = 0; i < 7 * 10000 * 10000; i++)
-  dummy += i;
+{  
+  struct list_elem *child_elem=NULL;
+  struct child_thread *child_t=NULL;
+  struct list_elem *e;
 
+  for (e = list_begin (&thread_current()->child_process_list); e != list_end (&thread_current()->child_process_list);
+           e = list_next (e))
+        {
+          struct child_thread *f = list_entry (e, struct child_thread, list_elem);
+          if(f->tid == child_tid)
+          {
+            child_t = f;
+            child_elem = e;
+          }
+        }
+
+
+  if(!child_t || !child_t)
+    return -1;
+
+  thread_current()->waiting_child_tid = child_t->tid;
+  sema_down(&thread_current()->child_sema);     // current thread blocking itself so its child process can run first
+  list_remove(child_elem);
   
-  return -1;
+  return child_t->exit_code;
 }
 
 /* Free the current process's resources. */

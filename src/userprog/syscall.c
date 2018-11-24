@@ -31,10 +31,10 @@ syscall_handler (struct intr_frame *f UNUSED)
 		// break;
 
 		case SYS_EXIT:
-		thread_exit();
+		exit_process(*(p+1));
 		break;
 
-		case SYS_WRITE:
+		case SYS_WRITE:			// first parameter is file descriptor
 		if(*(p+1)==1)
 		{
 			putbuf(*(p+2),*(p+3));
@@ -50,7 +50,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}
 		break;
 
-		case SYS_CREATE:
+		case SYS_CREATE:      // First parameter name of the file , second initial size of the file
 		{
 		// const char* filename;
       	// unsigned initial_size;
@@ -92,7 +92,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 				int i;
 				uint8_t* buffer = *(p+2);
 				for(i=0;i<*(p+3);i++)
-					buffer[i] = input_getc();
+					buffer[i]= input_getc();
 				f->eax = *(p+3);
 			}
 			else
@@ -117,6 +117,18 @@ syscall_handler (struct intr_frame *f UNUSED)
 		{
 			close_file(&thread_current()->file_list,*(p+1));
 			break;	
+		}
+
+		case SYS_EXEC:
+		{
+			f->eax = process_execute(*(p+1));
+			break;
+		}
+
+		case SYS_WAIT:
+		{
+			f->eax = process_wait(*(p+1));
+			break;
 		}
 		
 
@@ -186,4 +198,25 @@ void close_file(struct list* file_list, int fd_num)
           	list_remove(e);				 // remove the file from open file list of thread or process
           }
         }
+}
+
+void exit_process(int exit_code)
+{
+	struct list_elem *e;
+	thread_current()->exit_code = exit_code;			// set exit code to current threads exit code 
+
+      for (e = list_begin (&thread_current()->parent_thread->child_process_list); e != list_end (&thread_current()->parent_thread->child_process_list);
+           e = list_next (e))
+        {
+          if(list_entry (e, struct child_thread, list_elem)->tid == thread_current()->tid)
+          {
+          	list_entry (e, struct child_thread, list_elem)->exit_code = exit_code;          // it will give parent information about the exit status of child process
+          }
+        }
+	
+
+	if(thread_current()->parent_thread->waiting_child_tid == thread_current()->tid)			// start the parent process if child process its waiting on has completed execution
+		sema_up(&thread_current()->parent_thread->child_sema);
+
+	thread_exit();
 }
