@@ -21,9 +21,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void extract_file_name(char *name, char *file_name);
-static void get_arg_from_commandline(char *name, char* argv[], int *argc);
-static void push_arguments_on_stack(void **esp, char *file_name);
+
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
