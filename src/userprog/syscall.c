@@ -208,9 +208,9 @@ void exit_process(int exit_code)
       for (e = list_begin (&thread_current()->parent_thread->child_process_list); e != list_end (&thread_current()->parent_thread->child_process_list);
            e = list_next (e))
         {
-          if(list_entry (e, struct child_thread, list_elem)->tid == thread_current()->tid)
+          if(list_entry (e, struct child_thread_info, list_elem)->tid == thread_current()->tid)
           {
-          	list_entry (e, struct child_thread, list_elem)->exit_code = exit_code;          // it will give parent information about the exit status of child process
+          	list_entry (e, struct child_thread_info, list_elem)->exit_code = exit_code;          // it will give parent information about the exit status of child process
           }
         }
 	
