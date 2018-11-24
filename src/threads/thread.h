@@ -113,7 +113,7 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
-   struct child_thread
+   struct child_thread_info           // to hold the child thread information for parent thread
   {
     tid_t tid;
     struct list_elem list_elem;

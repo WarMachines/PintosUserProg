@@ -184,10 +184,10 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
-  struct child_thread* child_thread = malloc(sizeof(*child_thread));
-  child_thread->tid = tid;
-  child_thread->exit_code = 0;
-  list_push_back(&running_thread()->child_process_list,&child_thread->list_elem);
+  struct child_thread_info* child_t_info = malloc(sizeof(*child_t_info));
+  child_t_info->tid = tid;
+  child_t_info->exit_code = 0;
+  list_push_back(&running_thread()->child_process_list,&child_t_info->list_elem);
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
