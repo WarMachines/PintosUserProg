@@ -42,11 +42,11 @@ syscall_handler (struct intr_frame *f UNUSED)
 		}
 		else
 		{
-			struct process_file* f_ptr = file_search(&thread_current()->file_list, *(p+1));
-			if(f_ptr==NULL)
+			struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));
+			if(file_ptr==NULL)
 				f->eax=-1;
 			else
-				f->eax = file_write_at (f_ptr->file_ptr, *(p+2), *(p+3),0);
+				f->eax = file_write_at (file_ptr->file_ptr, *(p+2), *(p+3),0);
 		}
 		break;
 
@@ -75,20 +75,50 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		case SYS_OPEN:
 		{
-			struct file* fptr = filesys_open (*(p+1));
-			if(fptr==NULL)
+			struct file* file_ptr = filesys_open (*(p+1));  // return file with the given name
+			if(file_ptr == NULL)							// if no file exist with the given name
 				f->eax = -1;
 			else
 			{
-				struct process_file *pfile = malloc(sizeof(*pfile));
-				pfile->file_ptr = fptr;
-				pfile->fd_num = thread_current()->fd_num;
-				thread_current()->fd_num++;
-				list_push_back (&thread_current()->file_list, &pfile->elem);
-				f->eax = pfile->fd_num;
+				f->eax = open_file(file_ptr);
 			}
 			break;
 		}
+
+		case SYS_READ:
+		{
+			if(*(p+1)==0)
+			{
+				int i;
+				uint8_t* buffer = *(p+2);
+				for(i=0;i<*(p+3);i++)
+					buffer[i] = input_getc();
+				f->eax = *(p+3);
+			}
+			else
+			{
+				struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));
+				if(file_ptr==NULL)
+					f->eax=-1;
+				else
+					f->eax = file_read_at (file_ptr->file_ptr, *(p+2), *(p+3),0);
+			}
+			break;
+		}
+
+		case SYS_FILESIZE:
+		{
+			struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));
+			f->eax = file_length (file_ptr->file_ptr);
+			break;
+		}
+		
+		case SYS_CLOSE:
+		{
+			close_file(&thread_current()->file_list,*(p+1));
+			break;	
+		}
+		
 
 		default:
 		printf("No match\n");
@@ -120,10 +150,10 @@ syscall_handler (struct intr_frame *f UNUSED)
 // }
 
 
-struct process_file* file_search(struct list* files, int fd_num)
+struct process_file* file_search(struct list* file_list, int fd_num)
 {
 	struct list_elem *e;
-       for (e = list_begin (files); e != list_end (files);
+       for (e = list_begin (file_list); e != list_end (file_list);
            e = list_next (e))
         {
           struct process_file *f = list_entry (e, struct process_file, elem);
@@ -131,4 +161,29 @@ struct process_file* file_search(struct list* files, int fd_num)
           	return f;
         }
    return NULL;
+}
+
+int open_file(struct file* file_ptr)
+{
+	struct process_file *pfile = malloc(sizeof(*pfile));
+	pfile->file_ptr = file_ptr;
+	pfile->fd_num = thread_current()->fd_num;
+	thread_current()->fd_num++;
+	list_push_back (&thread_current()->file_list, &pfile->elem);
+	return pfile->fd_num;
+}
+
+void close_file(struct list* file_list, int fd_num)
+{
+	struct list_elem *e;
+       for (e = list_begin (file_list); e != list_end (file_list);
+           e = list_next (e))
+        {
+          struct process_file *f = list_entry (e, struct process_file, elem);
+          if(f->fd_num == fd_num)
+          {
+          	file_close(f->file_ptr);     // close the file
+          	list_remove(e);				 // remove the file from open file list of thread or process
+          }
+        }
 }

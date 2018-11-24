@@ -12,5 +12,8 @@ struct process_file {
 };
 
 struct process_file* file_search(struct list* files, int fd_num);
+int open_file(struct file* file_ptr);
+void close_file(struct list* file_list, int fd_num);
+
 
 #endif /* userprog/syscall.h */
