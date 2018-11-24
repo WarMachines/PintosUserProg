@@ -101,7 +101,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 				if(file_ptr==NULL)
 					f->eax=-1;
 				else
-					f->eax = file_read_at (file_ptr->file_ptr, *(p+2), *(p+3),0);
+					f->eax = file_read (file_ptr->file_ptr, *(p+2), *(p+3));
 			}
 			break;
 		}
