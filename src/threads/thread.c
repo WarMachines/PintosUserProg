@@ -94,6 +94,8 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
 
+  sema_init(&filesys_sema,1);     // initialize semaso first thread can access file system
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);

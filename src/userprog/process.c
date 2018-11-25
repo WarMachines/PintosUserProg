@@ -126,6 +126,9 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   printf("%s: exit(%d)\n",cur->name,cur->exit_code);
+  sema_down(&filesys_sema);
+  close_all_files(&thread_current ()->file_list);
+  sema_up(&filesys_sema);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -245,6 +248,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   int i;
 
   /* Allocate and activate page directory. */
+  sema_down(&filesys_sema);
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
@@ -351,6 +355,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  sema_up(&filesys_sema);
   return success;
 }
 

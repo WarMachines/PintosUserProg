@@ -35,53 +35,62 @@ syscall_handler (struct intr_frame *f UNUSED)
 		break;
 
 		case SYS_WRITE:			// first parameter is file descriptor
-		if(*(p+1)==1)
 		{
-			putbuf(*(p+2),*(p+3));
-			f->eax = *(p+3);
-		}
-		else
-		{
-			struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));
-			if(file_ptr==NULL)
-				f->eax=-1;
+			if(*(p+1)==1)
+			{
+				putbuf(*(p+2),*(p+3));
+				f->eax = *(p+3);
+			}
 			else
-				f->eax = file_write_at (file_ptr->file_ptr, *(p+2), *(p+3),0);
+			{
+				struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));
+				if(file_ptr==NULL)
+					f->eax=-1;
+				else
+				{
+					sema_down(&filesys_sema);
+					f->eax = file_write (file_ptr->file_ptr, *(p+2), *(p+3));
+					sema_up(&filesys_sema);
+				}
+			}
+			break;
 		}
-		break;
 
 		case SYS_CREATE:      // First parameter name of the file , second initial size of the file
 		{
-		// const char* filename;
-      	// unsigned initial_size;
+			sema_down(&filesys_sema);
+			// const char* filename;
+			// unsigned initial_size;
 
 
-		// memoryread_user(f->esp + 4, &filename, sizeof(filename));
-      	// memoryread_user(f->esp + 8, &initial_size, sizeof(initial_size));
+			// memoryread_user(f->esp + 4, &filename, sizeof(filename));
+			// memoryread_user(f->esp + 8, &initial_size, sizeof(initial_size));
 
-      	// s=f->eax = filesys_create(filename, initial_size);
-		// thread_current()->exit_code = -1;
-		// thread_exit();
-		//acquire_filesys_lock();
-		//hex_dump(*(p+1),*(p+1),16,true);
-		//printf("%s",(char *)*(p+1));
-		f->eax = filesys_create(*(p+1),*(p+2));
-		// printf("%d",s);
-		//release_filesys_lock();
-	
-		
-		break;
+			// s=f->eax = filesys_create(filename, initial_size);
+			// thread_current()->exit_code = -1;
+			// thread_exit();
+			//acquire_filesys_lock();
+			//hex_dump(*(p+1),*(p+1),16,true);
+			//printf("%s",(char *)*(p+1));
+			f->eax = filesys_create(*(p+1),*(p+2));
+			// printf("%d",s);
+			//release_filesys_lock();		
+			sema_up(&filesys_sema);
+			break;
 		}
 
 		case SYS_OPEN:
 		{
+			sema_down(&filesys_sema);
 			struct file* file_ptr = filesys_open (*(p+1));  // return file with the given name
+			sema_up(&filesys_sema);
 			if(file_ptr == NULL)							// if no file exist with the given name
 				f->eax = -1;
 			else
 			{
 				f->eax = open_file(file_ptr);
 			}
+			
 			break;
 		}
 
@@ -101,27 +110,37 @@ syscall_handler (struct intr_frame *f UNUSED)
 				if(file_ptr==NULL)
 					f->eax=-1;
 				else
+				{
+					sema_down(&filesys_sema);
 					f->eax = file_read (file_ptr->file_ptr, *(p+2), *(p+3));
-			}
+					sema_up(&filesys_sema);
+				}
+			}			
 			break;
 		}
 
 		case SYS_FILESIZE:
 		{
+			sema_down(&filesys_sema);
 			struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));
 			f->eax = file_length (file_ptr->file_ptr);
+			sema_up(&filesys_sema);
 			break;
 		}
 		
 		case SYS_CLOSE:
 		{
+			sema_down(&filesys_sema);
 			close_file(&thread_current()->file_list,*(p+1));
+			sema_up(&filesys_sema);
 			break;	
 		}
 
 		case SYS_EXEC:
 		{
+			sema_down(&filesys_sema);
 			f->eax = process_execute(*(p+1));
+			sema_up(&filesys_sema);
 			break;
 		}
 
@@ -129,6 +148,33 @@ syscall_handler (struct intr_frame *f UNUSED)
 		{
 			f->eax = process_wait(*(p+1));
 			break;
+		}
+
+		case SYS_SEEK:
+		{
+			sema_down(&filesys_sema);
+			file_seek(file_search(&thread_current()->file_list, *(p+1))->file_ptr,*(p+2));
+			sema_up(&filesys_sema);
+			break;
+		}
+
+		case SYS_TELL:
+		{
+			sema_down(&filesys_sema);
+			f->eax = file_tell(file_search(&thread_current()->file_list, *(p+1))->file_ptr);
+			sema_up(&filesys_sema);
+			break;
+		}
+
+		case SYS_REMOVE:
+		{			
+			sema_down(&filesys_sema);
+			if(filesys_remove(*(p+1))==NULL)
+				f->eax = false;
+			else
+				f->eax = true;
+			sema_up(&filesys_sema);
+		break;
 		}
 		
 
@@ -196,6 +242,8 @@ void close_file(struct list* file_list, int fd_num)
           {
           	file_close(f->file_ptr);     // close the file
           	list_remove(e);				 // remove the file from open file list of thread or process
+			free(f);
+			break;
           }
         }
 }
@@ -203,7 +251,7 @@ void close_file(struct list* file_list, int fd_num)
 void exit_process(int exit_code)
 {
 	struct list_elem *e;
-	thread_current()->exit_code = exit_code;			// set exit code to current threads exit code 
+	
 
       for (e = list_begin (&thread_current()->parent_thread->child_process_list); e != list_end (&thread_current()->parent_thread->child_process_list);
            e = list_next (e))
@@ -213,10 +261,31 @@ void exit_process(int exit_code)
           	list_entry (e, struct child_thread_info, list_elem)->exit_code = exit_code;          // it will give parent information about the exit status of child process
           }
         }
-	
+	thread_current()->exit_code = exit_code;			// set exit code to current threads exit code 
 
 	if(thread_current()->parent_thread->waiting_child_tid == thread_current()->tid)			// start the parent process if child process its waiting on has completed execution
 		sema_up(&thread_current()->parent_thread->child_sema);
 
 	thread_exit();
+}
+
+void close_all_files(struct list* files)
+{
+
+	struct list_elem *e;
+
+	while(!list_empty(files))
+	{
+		e = list_pop_front(files);
+
+		struct process_file *f = list_entry (e, struct process_file, elem);
+          
+	      	file_close(f->file_ptr);
+	      	list_remove(e);
+	      	free(f);
+
+
+	}
+
+      
 }
