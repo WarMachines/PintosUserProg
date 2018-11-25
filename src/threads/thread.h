@@ -118,6 +118,7 @@ struct thread
     tid_t tid;
     struct list_elem list_elem;
     int exit_code;
+    bool already_waited;
   };
 
 /* If false (default), use round-robin scheduler.

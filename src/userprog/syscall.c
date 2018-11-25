@@ -22,8 +22,11 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
   int * p = f->esp;
 
-
+  is_valid_address(p);						//check the stack pointer itself before moving forward for bad stack pointer tests
   int system_call = * p;
+
+  validate_user_address(p);								// validate user address referenceces for the type of system call before dereferencing them
+
 	switch (system_call)
 	{
 		// case SYS_HALT:
@@ -259,6 +262,7 @@ void exit_process(int exit_code)
           if(list_entry (e, struct child_thread_info, list_elem)->tid == thread_current()->tid)
           {
           	list_entry (e, struct child_thread_info, list_elem)->exit_code = exit_code;          // it will give parent information about the exit status of child process
+			list_entry (e, struct child_thread_info, list_elem)->already_waited = true;
           }
         }
 	thread_current()->exit_code = exit_code;			// set exit code to current threads exit code 
@@ -269,23 +273,72 @@ void exit_process(int exit_code)
 	thread_exit();
 }
 
-void close_all_files(struct list* files)
+void closed_open_files(struct list* file_list)
 {
-
 	struct list_elem *e;
-
-	while(!list_empty(files))
+	while(!list_empty(file_list))
 	{
-		e = list_pop_front(files);
-
-		struct process_file *f = list_entry (e, struct process_file, elem);
-          
-	      	file_close(f->file_ptr);
-	      	list_remove(e);
-	      	free(f);
-
-
+		e = list_pop_front(file_list);
+		struct process_file *f = list_entry (e, struct process_file, elem);          
+		file_close(f->file_ptr);
+		list_remove(e);
+		free(f);
 	}
 
       
+}
+
+void validate_user_address(int* ptr)
+{
+	switch(*ptr)
+	{
+		case SYS_EXIT:
+		case SYS_WAIT:
+		case SYS_FILESIZE:
+		case SYS_TELL:
+		case SYS_CLOSE:
+		{
+			is_valid_address(ptr+1);
+			break;
+		}
+
+		case SYS_EXEC:
+		case SYS_REMOVE:
+		case SYS_OPEN:
+		{
+			is_valid_address(ptr+1);
+			is_valid_address(*(ptr+1));
+			break;
+		}
+
+		case SYS_CREATE:
+		{
+			is_valid_address(ptr+2);
+			is_valid_address(*(ptr+1));
+			break;
+		}
+
+		case SYS_SEEK:
+		{
+			is_valid_address(ptr+2);
+			break;
+		}
+
+		case SYS_WRITE:
+		case SYS_READ:
+		{
+			is_valid_address(ptr+3);
+			is_valid_address(*(ptr+2));
+			break;
+		}
+	}
+}
+
+void* is_valid_address(void* address)
+{
+	if(is_user_vaddr(address) && pagedir_get_page(thread_current()->pagedir, address))
+	return;
+
+	exit_process(-1);
+	return;
 }

@@ -113,7 +113,8 @@ process_wait (tid_t child_tid UNUSED)
     return -1;
 
   thread_current()->waiting_child_tid = child_t_info->tid;
-  sema_down(&thread_current()->child_sema);     // current thread blocking itself so its child process can run first
+  if(!child_t_info->already_waited)
+    sema_down(&thread_current()->child_sema);     // current thread blocking itself so its child process can run first
   list_remove(child_elem);
   
   return child_t_info->exit_code;
@@ -127,7 +128,7 @@ process_exit (void)
   uint32_t *pd;
   printf("%s: exit(%d)\n",cur->name,cur->exit_code);
   sema_down(&filesys_sema);
-  close_all_files(&thread_current ()->file_list);
+  closed_open_files(&thread_current ()->file_list);
   sema_up(&filesys_sema);
 
   /* Destroy the current process's page directory and switch back
