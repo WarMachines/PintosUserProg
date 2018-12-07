@@ -62,22 +62,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_CREATE:      // First parameter name of the file , second initial size of the file
 		{
 			sema_down(&filesys_sema);
-			// const char* filename;
-			// unsigned initial_size;
-
-
-			// memoryread_user(f->esp + 4, &filename, sizeof(filename));
-			// memoryread_user(f->esp + 8, &initial_size, sizeof(initial_size));
-
-			// s=f->eax = filesys_create(filename, initial_size);
-			// thread_current()->exit_code = -1;
-			// thread_exit();
-			//acquire_filesys_lock();
-			//hex_dump(*(p+1),*(p+1),16,true);
-			//printf("%s",(char *)*(p+1));
 			f->eax = filesys_create(*(p+1),*(p+2));
-			// printf("%d",s);
-			//release_filesys_lock();		
 			sema_up(&filesys_sema);
 			break;
 		}
@@ -142,7 +127,14 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_EXEC:
 		{
 			sema_down(&filesys_sema);
-			f->eax = process_execute(*(p+1));
+			struct file* file_ptr = filesys_open (*(p+1));  // return file with the given name
+			if(file_ptr == NULL)							// if no file exist with the given name
+				f->eax = -1;
+			else
+			{
+				file_close(file_ptr);    // close the file as we dont really want any thing to do here with that file by opening it we just wanted to check if exits or not
+				f->eax = process_execute(*(p+1));
+			}			
 			sema_up(&filesys_sema);
 			break;
 		}
@@ -185,31 +177,6 @@ syscall_handler (struct intr_frame *f UNUSED)
 		printf("No match\n");
 	}
 }
-
-// static int
-// memoryread_user (void *src, void *dst, size_t bytes)
-// {
-//   int32_t value;
-//   size_t i;
-//   for(i=0; i<bytes; i++) {
-//     value = get_user(src + i);
-//     // if(value == -1) // segfault or invalid memory access
-//     //   fail_invalid_access();
-
-//     *(char*)(dst + i) = value & 0xff;
-//   }
-//   return (int)bytes;
-// }
-
-// static int
-// get_user (const uint8_t *uaddr)
-// {
-// int result;
-// asm ("movl $1f, %0; movzbl %1, %0; 1:"
-// : "=&a" (result) : "m" (*uaddr));
-// return result;
-// }
-
 
 struct process_file* file_search(struct list* file_list, int fd_num)
 {
