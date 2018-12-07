@@ -127,7 +127,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_EXEC:
 		{
 			sema_down(&filesys_sema);
-			struct file* file_ptr = filesys_open (*(p+1));  // return file with the given name
+			char *filename = *(p+1);
+			char *filenameduplicate = malloc (strlen((filename))+1);
+	  		strlcpy(filenameduplicate, filename, strlen(filename)+1);	  
+			char *save_ptr;
+			filenameduplicate = strtok_r(filenameduplicate," ",&save_ptr);
+			struct file* file_ptr = filesys_open (filenameduplicate);  // return file with the given name
 			if(file_ptr == NULL)							// if no file exist with the given name
 				f->eax = -1;
 			else
