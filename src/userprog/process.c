@@ -40,8 +40,8 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  file_name_only = malloc (strlen(fn_copy)+1);
-  extract_file_name(fn_copy, file_name_only);
+  file_name_only = malloc (strlen(fn_copy)+1);				// to have only file name for further operations allocate space
+  extract_file_name(fn_copy, file_name_only);               // get the file name
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name_only, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
@@ -63,7 +63,7 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (file_name, &if_.eip, &if_.esp);           // pass the entire arguments to function where we need it for stack setup
   //hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, true);
 
   /* If load failed, quit. */
@@ -101,7 +101,7 @@ process_wait (tid_t child_tid UNUSED)
            e = list_next (e))
         {
           struct child_thread_info *entry = list_entry (e, struct child_thread_info, list_elem);
-          if(entry->tid == child_tid)
+          if(entry->tid == child_tid)        // extract the information of the child process created by this process, so it can extract its information for further use
           {
             child_t_info = entry;
             child_elem = e;
@@ -109,15 +109,15 @@ process_wait (tid_t child_tid UNUSED)
         }
 
 
-  if(!child_t_info || !child_elem)
+  if(!child_t_info || !child_elem)      // if the child process does not exits in the parents child process information list it means this process was not created by the thread simply return from wait process
     return -1;
 
-  thread_current()->waiting_child_tid = child_t_info->tid;
+  thread_current()->waiting_child_tid = child_t_info->tid;      // set information on current thread before its start waiting for the child process, so assign child process tid to parents information
   if(!child_t_info->already_waited)
-    sema_down(&thread_current()->child_sema);     // current thread blocking itself so its child process can run first
-  list_remove(child_elem);
+    sema_down(&thread_current()->child_sema);        // current thread blocking itself so its child process can run first
+  list_remove(child_elem);							 // once child process woke parent process remove it from parents wait list as its information no longer required
   
-  return child_t_info->exit_code;
+  return child_t_info->exit_code;                    // return the exit code of child process
 }
 
 /* Free the current process's resources. */
@@ -126,9 +126,9 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  printf("%s: exit(%d)\n",cur->name,cur->exit_code);
+  printf("%s: exit(%d)\n",cur->name,cur->exit_code);      // print the exit code of the current thread once its about to finish
   sema_down(&filesys_sema);
-  closed_open_files(&thread_current ()->file_list);
+  closed_open_files(&thread_current ()->file_list);       // close all the files that is opened by this thread
   sema_up(&filesys_sema);
 
   /* Destroy the current process's page directory and switch back
@@ -249,7 +249,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   int i;
 
   /* Allocate and activate page directory. */
-  sema_down(&filesys_sema);
+  sema_down(&filesys_sema);                      // down sema to sybchronize load process else it was breaking in syc test cases as multiple processes are can try to load at the same time, avoid that by using sema
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
@@ -259,7 +259,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   char *fn_copy = malloc (strlen(file_name)+1);
   strlcpy(fn_copy, file_name, strlen(file_name)+1);
 
-  char *file_name_only = malloc (strlen(fn_copy)+1);
+  char *file_name_only = malloc (strlen(fn_copy)+1);          // just extract the file name
   extract_file_name(fn_copy, file_name_only);
 
   /* Open executable file. */
@@ -355,8 +355,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
-  sema_up(&filesys_sema);
+  file_close (file);                  
+  sema_up(&filesys_sema);        // up the semaphore once process is loaded
   return success;
 }
 
@@ -471,7 +471,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp, char *file_name) 
+setup_stack (void **esp, char *file_name)      // change to accept argument so we can push those onto stack here
 {
   uint8_t *kpage;
   bool success = false;
@@ -486,7 +486,7 @@ setup_stack (void **esp, char *file_name)
         palloc_free_page (kpage);
     }
 
-  push_arguments_on_stack(esp,file_name);
+  push_arguments_on_stack(esp,file_name);        // push argument over stack
 
   return success;
 }
@@ -511,6 +511,7 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
+// This function will extract the only file name from the arguments 
 static void
 extract_file_name(char *name, char *file_name)
 {
@@ -532,6 +533,8 @@ get_arg_from_commandline(char *name, char* argv[], int *argc)
   }
 }
 
+
+// push the arguments onto the stack in the manner asked in the pintos manual and project description
 static void 
 push_arguments_on_stack(void **esp, char *file_name)
 {
@@ -541,6 +544,7 @@ push_arguments_on_stack(void **esp, char *file_name)
   char * copy = malloc(strlen(file_name)+1);
   strlcpy (copy, file_name, strlen(file_name)+1);
 
+  // get the count of argument so we can create an array to store the addresses we have pushed onto the stack
   for (token = strtok_r (copy, " ", &save_ptr); token != NULL;
     token = strtok_r (NULL, " ", &save_ptr))
     argc++;
@@ -551,38 +555,40 @@ push_arguments_on_stack(void **esp, char *file_name)
     token = strtok_r (NULL, " ", &save_ptr),i++)
     {
       *esp -= strlen(token) + 1;
-      memcpy(*esp,token,strlen(token) + 1);
-      argv[i]=(int) *esp;
+      memcpy(*esp,token,strlen(token) + 1);     // push the arguments onto the stack
+      argv[i]=(int) *esp;						// store the esp address where we have pushed the addresses
     }
 
   while((int)*esp%4!=0)
   {
     *esp-=sizeof(char);
     char x = '0';
-    memcpy(*esp,&x,sizeof(char));
+    memcpy(*esp,&x,sizeof(char));			   // align the stack
   }
 
   int zero = 0;
 
   *esp-=sizeof(int);
-  memcpy(*esp,&zero,sizeof(int));
+  memcpy(*esp,&zero,sizeof(int));              // push fake value to separation between arguments and their addresses
 
   for(i=argc-1;i>=0;i--)
   {
     *esp-=sizeof(int);
-    memcpy(*esp,&argv[i],sizeof(int));
+    memcpy(*esp,&argv[i],sizeof(int));         // push the addresses of the arguments in the reverse order as required in setup stack
   }
 
   int pt = (int)*esp;
   *esp-=sizeof(int);
-  memcpy(*esp,&pt,sizeof(int));
+  memcpy(*esp,&pt,sizeof(int));				// fake return address
 
   *esp-=sizeof(int);
-  memcpy(*esp,&argc,sizeof(int));
+  memcpy(*esp,&argc,sizeof(int));          // push argument count onto the stack
 
   *esp-=sizeof(int);
-  memcpy(*esp,&zero,sizeof(int));
+  memcpy(*esp,&zero,sizeof(int));          // push fake return address (0)
 
+  
+  // free not required memory allocations
   free(copy);
   free(argv);
 }
