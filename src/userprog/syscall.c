@@ -46,7 +46,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			}
 			else
 			{
-				struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));
+				struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));          // before we can write in a file it must be opened first, so search it in the opened list of files
 				if(file_ptr==NULL)
 					f->eax=-1;
 				else
@@ -94,7 +94,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			}
 			else
 			{
-				struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));
+				struct process_file* file_ptr = file_search(&thread_current()->file_list, *(p+1));        // its must be opened first so search in the opened list
 				if(file_ptr==NULL)
 					f->eax=-1;
 				else
@@ -132,7 +132,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 	  		strlcpy(filenameduplicate, filename, strlen(filename)+1);	  
 			char *save_ptr;
 			filenameduplicate = strtok_r(filenameduplicate," ",&save_ptr);
-			struct file* file_ptr = filesys_open (filenameduplicate);  // return file with the given name
+			struct file* file_ptr = filesys_open (filenameduplicate);  // check if file exits with this name by trying to open it, (exec-missing was failing without it)
 			if(file_ptr == NULL)							// if no file exist with the given name
 				f->eax = -1;
 			else
@@ -189,7 +189,7 @@ struct process_file* file_search(struct list* file_list, int fd_num)
        for (e = list_begin (file_list); e != list_end (file_list);
            e = list_next (e))
         {
-          struct process_file *f = list_entry (e, struct process_file, elem);
+          struct process_file *f = list_entry (e, struct process_file, elem);       // search file in open list with file descriptor number, thats why every time we open a file we are changing the FD
           if(f->fd_num == fd_num)
           	return f;
         }
@@ -201,8 +201,8 @@ int open_file(struct file* file_ptr)
 	struct process_file *pfile = malloc(sizeof(*pfile));
 	pfile->file_ptr = file_ptr;
 	pfile->fd_num = thread_current()->fd_num;
-	thread_current()->fd_num++;
-	list_push_back (&thread_current()->file_list, &pfile->elem);
+	thread_current()->fd_num++;                                          // everytime thread opends a file its file descriptor should be different, so we can work with the file descriptot and recognize different file with file descriptor
+	list_push_back (&thread_current()->file_list, &pfile->elem);         // push the file everytime we open a file by the thread, thread maintains this information in the list form for further use of files
 	return pfile->fd_num;
 }
 
@@ -245,6 +245,8 @@ void exit_process(int exit_code)
 	thread_exit();
 }
 
+
+// close all the files opened by a thread in case its exiting
 void closed_open_files(struct list* file_list)
 {
 	struct list_elem *e;
