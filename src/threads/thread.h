@@ -94,8 +94,8 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     int exit_code;
-    struct list file_list;
-    int fd_num;
+    struct list file_list;             // file list which are opened by the thread
+    int fd_num;                        // file descriptor number
 
     // for child and parent relationship
     struct thread* parent_thread;
@@ -115,10 +115,10 @@ struct thread
 
    struct child_thread_info           // to hold the child thread information for parent thread
   {
-    tid_t tid;
-    struct list_elem list_elem;
-    int exit_code;
-    bool already_waited;
+    tid_t tid;                        // hold child threads tid
+    struct list_elem list_elem;       //  hold elem for this node in the list
+    int exit_code;                    // hold exit code of the child thread
+    bool already_waited;              // hold the status if child thread has exited once
   };
 
 /* If false (default), use round-robin scheduler.
@@ -157,6 +157,6 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-struct semaphore filesys_sema;
+struct semaphore filesys_sema;           // define a sema for synchronisation in file system calls
 
 #endif /* threads/thread.h */

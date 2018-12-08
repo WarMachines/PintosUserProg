@@ -186,11 +186,12 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  // consider current thread as parent of the this thread we are creating and setup the required node with this thread we are creating so parent have some information about its child threads
   struct child_thread_info* child_t_info = malloc(sizeof(*child_t_info));
   child_t_info->tid = tid;
   child_t_info->exit_code = 0;
   child_t_info->already_waited = false;
-  list_push_back(&running_thread()->child_process_list,&child_t_info->list_elem);
+  list_push_back(&running_thread()->child_process_list,&child_t_info->list_elem);        // push this information to the list maintained by the this thread  which will be parent thread for this new thread we are creating
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -471,12 +472,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->exit_code = 0;
-  list_init(&t->file_list);
-  t->fd_num = 2;
-  list_init(&t->child_process_list);
-  t->parent_thread = running_thread();
-  t->waiting_child_tid = 0;
-  sema_init(&t->child_sema,0);  
+  list_init(&t->file_list);                       // intiate the list which hold open file list by this thread
+  t->fd_num = 2;                                  // set file descriptor for new thread with 2, as 0 and 1 are for system input output.
+  list_init(&t->child_process_list);              // initial child process list too for the thread
+  t->parent_thread = running_thread();            // new threads parent will be currently running thread as this thread is created by running thread
+  t->waiting_child_tid = 0;                       
+  sema_init(&t->child_sema,0);                    // initial child sema for current thread, which will be used while wait functionality
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
